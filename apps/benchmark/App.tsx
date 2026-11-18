@@ -18,8 +18,14 @@ import { formatBytes, MODELS, type ModelSpec } from './src/models';
 import { Preview } from './src/Preview';
 import { checkRuntimes, loadSegmenter } from './src/runners';
 import { deleteModel, diskSpace, downloadedSize, downloadModel, modelFile } from './src/storage';
+import { buildMaskTrack, type MaskTrack } from './src/videoMasks';
+import { VideoPreview } from './src/VideoPreview';
 
 const SAMPLE_FRAMES = 30;
+/** Masks per second for full-video processing. The player uses the nearest mask. */
+const MASK_FPS = 10;
+/** Longest clip processed on the phone, to keep memory and wait time sane. */
+const MAX_VIDEO_SEC = 30;
 
 export default function App() {
   const [sizes, setSizes] = useState<Record<string, number | null>>({});
@@ -32,6 +38,8 @@ export default function App() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [overlayText, setOverlayText] = useState('DREAM');
   const [runtimes, setRuntimes] = useState<Record<string, string> | null>(null);
+  const [video, setVideo] = useState<{ uri: string; durationMs: number } | null>(null);
+  const [track, setTrack] = useState<(MaskTrack & { modelId: string }) | null>(null);
 
   useEffect(() => {
     const r = checkRuntimes();
@@ -73,6 +81,9 @@ export default function App() {
         setBusy(`Extracting frames… ${d}/${SAMPLE_FRAMES}`),
       );
       setFrames(f);
+      setVideo({ uri: asset.uri, durationMs });
+      track?.masks.forEach((m) => m.dispose());
+      setTrack(null);
       setResults({});
       setPreviewId(null);
     });
@@ -89,6 +100,23 @@ export default function App() {
         );
         setResults((prev) => ({ ...prev, [m.id]: r }));
         setPreviewId(m.id);
+      } finally {
+        await seg.dispose();
+      }
+    });
+
+  const processVideo = (m: ModelSpec) =>
+    guard(`Loading ${m.name}…`, async () => {
+      if (!video) throw new Error('Pick a video first');
+      const seg = await loadSegmenter(m, modelFile(m).uri, useGpu ? 'gpu' : 'cpu');
+      try {
+        track?.masks.forEach((mk) => mk.dispose());
+        setTrack(null);
+        const durationMs = Math.min(video.durationMs, MAX_VIDEO_SEC * 1000);
+        const t = await buildMaskTrack(m, seg, video.uri, durationMs, MASK_FPS, (d, total) =>
+          setBusy(`${m.name}: processing video ${d}/${total} frames`),
+        );
+        setTrack({ ...t, modelId: m.id });
       } finally {
         await seg.dispose();
       }
@@ -162,6 +190,13 @@ export default function App() {
                 )}
               </View>
               {r && <ResultView r={r} onPreview={() => setPreviewId(m.id)} />}
+              {r && (
+                <Btn
+                  label={`Process whole video (${MASK_FPS} fps)`}
+                  onPress={() => processVideo(m)}
+                  disabled={!!busy}
+                />
+              )}
             </View>
           );
         })}
@@ -173,6 +208,23 @@ export default function App() {
           </View>
         )}
         {error && <Text style={styles.error}>{error}</Text>}
+
+        {track && video && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>4. Whole video: text behind person</Text>
+            <TextInput
+              value={overlayText}
+              onChangeText={setOverlayText}
+              style={styles.input}
+              autoCapitalize="characters"
+            />
+            <VideoPreview videoUri={video.uri} track={track} text={overlayText} />
+            <Text style={styles.muted}>
+              {MODELS.find((m) => m.id === track.modelId)?.name} · processed in {track.tookSec.toFixed(1)} s
+              {video.durationMs > MAX_VIDEO_SEC * 1000 ? ` (first ${MAX_VIDEO_SEC} s only)` : ''}
+            </Text>
+          </View>
+        )}
 
         {preview && (
           <View style={styles.card}>

@@ -1,4 +1,5 @@
 import { AlphaType, ColorType, Skia, type SkImage } from '@shopify/react-native-skia';
+import { File } from 'expo-file-system';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 
 export interface Frame {
@@ -67,6 +68,38 @@ export function maskToImage(mask: Float32Array, size: number): SkImage {
     { width: size, height: size, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Unpremul },
     Skia.Data.fromBytes(rgba),
     size * 4,
+  );
+  if (!img) throw new Error('Could not build mask image');
+  return img;
+}
+
+/** Decode one video frame at `timeMs`. The temporary thumbnail file is deleted right away. */
+export async function grabFrame(videoUri: string, timeMs: number): Promise<SkImage> {
+  const thumb = await VideoThumbnails.getThumbnailAsync(videoUri, { time: timeMs, quality: 0.8 });
+  try {
+    const data = await Skia.Data.fromURI(thumb.uri);
+    const image = Skia.Image.MakeImageFromEncoded(data);
+    if (!image) throw new Error(`Could not decode frame at ${timeMs} ms`);
+    return image;
+  } finally {
+    try {
+      new File(thumb.uri).delete();
+    } catch {
+      // Cache files are cleaned up by the OS eventually; not worth failing over.
+    }
+  }
+}
+
+/** Compact mask image: one byte per pixel (alpha only), 4x smaller than RGBA. */
+export function maskToAlphaImage(mask: Float32Array, size: number): SkImage {
+  const alpha = new Uint8Array(size * size);
+  for (let i = 0; i < alpha.length; i++) {
+    alpha[i] = Math.max(0, Math.min(255, Math.round(mask[i] * 255)));
+  }
+  const img = Skia.Image.MakeImage(
+    { width: size, height: size, colorType: ColorType.Alpha_8, alphaType: AlphaType.Premul },
+    Skia.Data.fromBytes(alpha),
+    size,
   );
   if (!img) throw new Error('Could not build mask image');
   return img;
