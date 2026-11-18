@@ -1,0 +1,26 @@
+{
+  "name": "@ai-editor/compositions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remotion video templates shared by the render server (and later the app's web preview).",
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "node render.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.545",
+    "@remotion/cli": "4.0.545",
+    "@remotion/fonts": "4.0.545",
+    "@remotion/renderer": "4.0.545",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "remotion": "4.0.545",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

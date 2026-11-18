@@ -1,0 +1,14 @@
+{
+  "name": "@ai-editor/hyperframes-text-behind",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Text-behind-person as a HyperFrames (HTML + GSAP) composition.",
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "gsap": "3.15.1",
+    "hyperframes": "0.9.67"
+  }
+}
