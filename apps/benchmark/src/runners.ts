@@ -1,5 +1,5 @@
 import type { InferenceSession } from 'onnxruntime-react-native';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import type { TfliteModel } from 'react-native-fast-tflite';
 import type { ModelSpec } from './models';
 
@@ -7,7 +7,12 @@ import type { ModelSpec } from './models';
 // the app shows the error instead of crashing on launch.
 type OrtModule = typeof import('onnxruntime-react-native');
 type TfliteModule = typeof import('react-native-fast-tflite');
-const ort = (): OrtModule => require('onnxruntime-react-native');
+const ort = (): OrtModule => {
+  // Check before requiring: the library calls the native module at import time, and an
+  // import-time error is reported as fatal by the module system even inside try/catch.
+  if (!NativeModules.Onnxruntime) throw new Error('ONNX Runtime native module is not linked');
+  return require('onnxruntime-react-native');
+};
 const tfl = (): TfliteModule => require('react-native-fast-tflite');
 
 /** Try to initialise each runtime. Returns 'ok' or the error message per runtime. */
