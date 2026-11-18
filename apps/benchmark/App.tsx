@@ -16,7 +16,7 @@ import { estimateSeconds, runBenchmark, type BenchResult } from './src/benchmark
 import { extractFrames, type Frame } from './src/frames';
 import { formatBytes, MODELS, type ModelSpec } from './src/models';
 import { Preview } from './src/Preview';
-import { loadSegmenter } from './src/runners';
+import { checkRuntimes, loadSegmenter } from './src/runners';
 import { deleteModel, diskSpace, downloadedSize, downloadModel, modelFile } from './src/storage';
 
 const SAMPLE_FRAMES = 30;
@@ -31,6 +31,13 @@ export default function App() {
   const [results, setResults] = useState<Record<string, BenchResult>>({});
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [overlayText, setOverlayText] = useState('DREAM');
+  const [runtimes, setRuntimes] = useState<Record<string, string> | null>(null);
+
+  useEffect(() => {
+    const r = checkRuntimes();
+    console.log('BENCH_SELFCHECK', JSON.stringify(r));
+    setRuntimes(r);
+  }, []);
 
   const refreshStorage = useCallback(() => {
     setSizes(Object.fromEntries(MODELS.map((m) => [m.id, downloadedSize(m)])));
@@ -101,6 +108,12 @@ export default function App() {
           <Text style={styles.cardTitle}>Storage</Text>
           <Text>Free space: {formatBytes(disk.free)} of {formatBytes(disk.total)}</Text>
           <Text>Downloaded models: {formatBytes(totalModels)}</Text>
+          {runtimes &&
+            Object.entries(runtimes).map(([k, v]) => (
+              <Text key={k} style={v === 'ok' ? styles.muted : styles.error}>
+                {k.toUpperCase()} runtime: {v}
+              </Text>
+            ))}
         </View>
 
         <View style={styles.card}>

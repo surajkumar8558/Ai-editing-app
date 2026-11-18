@@ -14,3 +14,22 @@ index 41b4359..2d8d798 100644
  
    // By default it will just include onnxruntime full aar package
    if (ortExtensionsEnabled) {
+diff --git a/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/OnnxruntimeModule.java b/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/OnnxruntimeModule.java
+index c362e6a..a01a8f8 100644
+--- a/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/OnnxruntimeModule.java
++++ b/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/OnnxruntimeModule.java
+@@ -47,11 +47,12 @@ public class OnnxruntimeModule extends ReactContextBaseJavaModule {
+     try {
+       System.loadLibrary("onnxruntimejsi");
+       JavaScriptContextHolder jsContext = getReactApplicationContext().getJavaScriptContextHolder();
++      // Patched: getCatalystInstance() is unsupported in bridgeless mode (React Native new architecture).
+       CallInvokerHolderImpl jsCallInvokerHolder =
+-        (CallInvokerHolderImpl) getReactApplicationContext().getCatalystInstance().getJSCallInvokerHolder();
++        (CallInvokerHolderImpl) getReactApplicationContext().getJSCallInvokerHolder();
+       nativeInstall(jsContext.get(), jsCallInvokerHolder);
+       return true;
+-    } catch (Exception e) {
++    } catch (Throwable e) {
+       return false;
+     }
+   }

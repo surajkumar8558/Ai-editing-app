@@ -5,59 +5,107 @@ on:
     paths:
       - 'apps/benchmark/**'
       - '.github/workflows/android-benchmark-apk.yml'
+      - '.github/scripts/android-smoke-test.sh'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  # Phone APK: release build (JS bundled in), 64-bit ARM only to keep it small.
+  # Expo's template signs release builds with the debug key, which is fine for sideloading.
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: apps/benchmark
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/benchmark/package-lock.json
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-
       - uses: gradle/actions/setup-gradle@v4
-
       - name: Install JS dependencies
+        working-directory: apps/benchmark
         run: npm ci
-
       - name: Generate native Android project
+        working-directory: apps/benchmark
         run: npx expo prebuild --platform android --no-install
-
-      # Release build: JS is bundled into the APK, so it runs without a computer.
-      # Expo's template signs release builds with the debug key, which is fine for sideloading.
-      # arm64-v8a only: covers every phone from the last ~8 years and keeps the APK small.
-      - name: Build APK
+      - name: Build APK (arm64)
         working-directory: apps/benchmark/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon -Dorg.gradle.jvmargs=-Xmx4g
-
       - uses: actions/upload-artifact@v4
         with:
           name: ai-editor-benchmark-apk
-          path: apps/benchmark/android/app/build/outputs/apk/release/*.apk
+          path: apps/benchmark/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
-      # Also commit the APK to the branch so it can be downloaded without the Actions UI.
+  # Same app built for x86_64 and launched on an emulator, to catch crashes on startup.
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/benchmark/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install JS dependencies
+        working-directory: apps/benchmark
+        run: npm ci
+      - name: Generate native Android project
+        working-directory: apps/benchmark
+        run: npx expo prebuild --platform android --no-install
+      - name: Build APK (x86_64)
+        working-directory: apps/benchmark/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon -Dorg.gradle.jvmargs=-Xmx4g
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash .github/scripts/android-smoke-test.sh apps/benchmark/android/app/build/outputs/apk/release/app-release.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-logs
+          path: |
+            logcat.txt
+            screen.png
+          if-no-files-found: ignore
+
+  # Commit the phone APK to the branch so it can be downloaded without the Actions UI.
+  # Only runs if the app launched on the emulator without crashing.
+  publish:
+    needs: [build, smoke-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ai-editor-benchmark-apk
+          path: dist
       - name: Commit APK to branch
-        working-directory: .
         run: |
           mkdir -p apk
-          cp apps/benchmark/android/app/build/outputs/apk/release/app-release.apk apk/ai-editor-benchmark.apk
+          cp dist/app-release.apk apk/ai-editor-benchmark.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add apk/ai-editor-benchmark.apk

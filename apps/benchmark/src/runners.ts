@@ -1,7 +1,34 @@
-import { InferenceSession, Tensor } from 'onnxruntime-react-native';
+import type { InferenceSession } from 'onnxruntime-react-native';
 import { Platform } from 'react-native';
-import { loadTensorflowModel, type TfliteModel } from 'react-native-fast-tflite';
+import type { TfliteModel } from 'react-native-fast-tflite';
 import type { ModelSpec } from './models';
+
+// The ML runtimes are required lazily: if a native module fails to initialise,
+// the app shows the error instead of crashing on launch.
+type OrtModule = typeof import('onnxruntime-react-native');
+type TfliteModule = typeof import('react-native-fast-tflite');
+const ort = (): OrtModule => require('onnxruntime-react-native');
+const tfl = (): TfliteModule => require('react-native-fast-tflite');
+
+/** Try to initialise each runtime. Returns 'ok' or the error message per runtime. */
+export function checkRuntimes(): Record<'tflite' | 'onnx', string> {
+  const check = (fn: () => unknown) => {
+    try {
+      fn();
+      return 'ok';
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  };
+  return {
+    tflite: check(() => tfl().loadTensorflowModel),
+    onnx: check(() => {
+      const { InferenceSession } = ort();
+      if (typeof InferenceSession?.create !== 'function') throw new Error('InferenceSession missing');
+      if (typeof (globalThis as { OrtApi?: unknown }).OrtApi === 'undefined') throw new Error('OrtApi JSI not installed');
+    }),
+  };
+}
 
 export type Accel = 'gpu' | 'cpu';
 
@@ -22,6 +49,7 @@ export async function loadSegmenter(model: ModelSpec, fileUri: string, accel: Ac
 // ---------- TFLite (MediaPipe): NHWC float32 in [0,1] ----------
 
 async function loadTflite(model: ModelSpec, fileUri: string, accel: Accel): Promise<Segmenter> {
+  const { loadTensorflowModel } = tfl();
   const gpuDelegate = Platform.OS === 'ios' ? 'core-ml' : 'android-gpu';
   let tflite: TfliteModel;
   let backend = 'cpu';
@@ -57,6 +85,7 @@ async function loadTflite(model: ModelSpec, fileUri: string, accel: Accel): Prom
 // ---------- ONNX (MODNet): NCHW float32, normalized to [-1,1] ----------
 
 async function loadOnnx(model: ModelSpec, fileUri: string, accel: Accel): Promise<Segmenter> {
+  const { InferenceSession, Tensor } = ort();
   const gpuProvider = Platform.OS === 'ios' ? 'coreml' : 'nnapi';
   const providers = accel === 'gpu' ? [gpuProvider, 'cpu'] : ['cpu'];
   let session: InferenceSession;
