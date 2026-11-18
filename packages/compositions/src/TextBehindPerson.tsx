@@ -1,10 +1,8 @@
-import { loadFont } from '@remotion/fonts';
 import { AbsoluteFill, interpolate, OffthreadVideo, spring, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
 import { z } from 'zod';
+import { DISPLAY_FONT } from './fonts';
 
-// Font file ships in public/fonts (OFL licence), so renders never depend on a font CDN.
-const fontFamily = 'Anton';
-loadFont({ family: fontFamily, url: staticFile('fonts/Anton-Regular.woff2') });
+const fontFamily = DISPLAY_FONT;
 
 export const textBehindPersonSchema = z.object({
   /** Original video, a file in public/ (or an https URL). */

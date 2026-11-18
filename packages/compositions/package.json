@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@remotion/bundler": "4.0.545",
+    "@remotion/captions": "4.0.545",
     "@remotion/cli": "4.0.545",
     "@remotion/fonts": "4.0.545",
     "@remotion/renderer": "4.0.545",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
